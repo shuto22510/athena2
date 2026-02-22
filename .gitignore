@@ -1,17 +1,11 @@
 __pycache__/
-.venv/
 *.pyc
 .ipynb_checkpoints/
+*.pkl
+*.pt
+*.pth
+data/ETTh2.csv
+data/ETTm1.csv
+data/ETTm2.csv
+*.log
 .DS_Store
-
-# Model checkpoints & results
-checkpoints/
-results/
-results_720/
-informer/results/
-
-# Data (large CSV)
-data/
-
-# Outputs (generated figures & npy)
-outputs/

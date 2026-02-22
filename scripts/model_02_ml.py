@@ -1,5 +1,7 @@
 """Step 2: MLモデル比較（LightGBM / XGBoost / RandomForest / Ridge）"""
 
+# model_02_ml.py — ML評価（Ridge/LightGBM） Ridge α=2000 含む
+import os, sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -141,7 +143,9 @@ for h in HORIZONS:
     actual_test = y_test
 
     persist_pred = ot[test_start_pos : test_start_pos + len(y_test)]
-    seasonal_pred = ot[test_start_pos + h - 24 : test_start_pos + h - 24 + len(y_test)]
+    # SeasonalNaive logic (no logic leakage): yhat[t+h] = y[t - 24 + ((h-1)%24 + 1)]
+    k = ((h - 1) % 24) + 1
+    seasonal_pred = ot[test_start_pos - 24 + k : test_start_pos - 24 + k + len(y_test)]
 
     for name, pred in [("Persistence", persist_pred), ("SeasonalNaive24", seasonal_pred)]:
         n = min(len(pred), len(actual_test))

@@ -1,6 +1,8 @@
 """Step 2.5: Recursive Forecasting（1hモデルを再帰的に適用して長期予測）"""
 
 import time
+# step2_recursive.py — 再帰的予測の検証
+import os, sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -199,7 +201,9 @@ for h in HORIZONS:
     n_test = test_end - test_start - h
     actual = ot[test_start + h:test_start + h + n_test]
     persist_pred = ot[test_start:test_start + n_test]
-    seasonal_pred = ot[test_start + h - 24:test_start + h - 24 + n_test]
+    # SeasonalNaive logic (no logic leakage): yhat[t+h] = y[t - 24 + ((h-1)%24 + 1)]
+    k = ((h - 1) % 24) + 1
+    seasonal_pred = ot[test_start - 24 + k : test_start - 24 + k + n_test]
 
     for name, pred in [("Persistence", persist_pred), ("SeasonalNaive24", seasonal_pred)]:
         results.append({

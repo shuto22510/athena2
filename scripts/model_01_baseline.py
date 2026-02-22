@@ -1,5 +1,9 @@
-"""Step 1: ベースラインモデル（Persistence / Seasonal Naive / Mean）"""
+"""Step 1: ベースラインモデル（Persistence / Seasonal Naive / Mean）
+- SeasonalNaive24 は「直近24時間を未来に繰り返し貼る」定義（未来参照なし）
+"""
 
+# model_01_baseline.py — Persistence/SeasonalNaive/Meanの評価（リーク修正済み）
+import os, sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,6 +12,9 @@ import matplotlib.pyplot as plt
 DATA_PATH = "data/ETTh1.csv"
 FIGURES_DIR = "outputs/figures/"
 HORIZONS = [1, 6, 24, 168]
+PERIOD = 24  # 24h seasonality (ETTh1 is hourly)
+
+os.makedirs(FIGURES_DIR, exist_ok=True)
 
 plt.rcParams.update({
     "figure.facecolor": "white",
@@ -33,6 +40,7 @@ ot = df["OT"].values
 
 TRAIN_END = 12 * 30 * 24  # 8640
 VAL_END = TRAIN_END + 4 * 30 * 24  # 11520
+
 train_ot = ot[:TRAIN_END]
 test_ot = ot[VAL_END:]
 test_index = df.index[VAL_END:]
@@ -45,37 +53,43 @@ print(f"Test:  {len(test_ot)} samples (index {VAL_END}~{len(ot) - 1})")
 print(f"Train OT mean: {train_mean:.2f}")
 print()
 
-# --- ベースライン予測生成・評価 ---
+# --- 評価関数 ---
 def mae(y_true, y_pred):
     mask = ~np.isnan(y_true) & ~np.isnan(y_pred)
     return np.mean(np.abs(y_true[mask] - y_pred[mask]))
-
 
 def rmse(y_true, y_pred):
     mask = ~np.isnan(y_true) & ~np.isnan(y_pred)
     return np.sqrt(np.mean((y_true[mask] - y_pred[mask]) ** 2))
 
-
+# --- ベースライン予測生成・評価 ---
 results = []
 
 for h in HORIZONS:
-    # 予測対象: ot[VAL_END + h - 1] 以降（hステップ先を予測できる時点から）
-    # 時刻tにおいて、t+h を予測する
-    # t の範囲: VAL_END ~ len(ot) - h - 1
-    # 実績: ot[t + h]
+    # 予測対象: y[t+h] を、時刻 t の情報だけで予測する
+    # t の範囲: VAL_END .. len(ot)-h-1
     n_test = len(ot) - VAL_END - h
     if n_test <= 0:
         continue
 
+    # 実績 y[t+h]
     actual = ot[VAL_END + h : VAL_END + h + n_test]
 
-    # Persistence: 予測 = ot[t]
+    # Persistence: yhat[t+h] = y[t]
     pred_persist = ot[VAL_END : VAL_END + n_test]
 
-    # Seasonal Naive (24h): 予測 = ot[t + h - 24]
-    pred_seasonal = ot[VAL_END + h - 24 : VAL_END + h - 24 + n_test]
+    # Seasonal Naive (24h, no leakage):
+    # 「直近24時間の波形を未来に繰り返し貼る」
+    # k は 1..24 のどれか（未来の時間帯）
+    # k = ((h-1) % 24) + 1
+    # yhat[t+h] = y[t - 24 + k]
+    k = ((h - 1) % PERIOD) + 1
+    start = VAL_END - PERIOD + k
+    if start < 0:
+        raise ValueError("Not enough history for SeasonalNaive24. Increase warmup or adjust split.")
+    pred_seasonal = ot[start : start + n_test]
 
-    # Mean: 予測 = train mean
+    # Mean: yhat = train_mean
     pred_mean = np.full(n_test, train_mean)
 
     for name, pred in [
@@ -103,10 +117,14 @@ for h in HORIZONS:
 h_plot = 24
 n_plot = 14 * 24  # 2週間
 n_test_plot = min(n_plot, len(ot) - VAL_END - h_plot)
+
 plot_index = test_index[h_plot : h_plot + n_test_plot]
 actual_plot = ot[VAL_END + h_plot : VAL_END + h_plot + n_test_plot]
 persist_plot = ot[VAL_END : VAL_END + n_test_plot]
-seasonal_plot = ot[VAL_END + h_plot - 24 : VAL_END + h_plot - 24 + n_test_plot]
+
+k_plot = ((h_plot - 1) % PERIOD) + 1
+start_plot = VAL_END - PERIOD + k_plot
+seasonal_plot = ot[start_plot : start_plot + n_test_plot]
 
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(plot_index, actual_plot, label="Actual", color="black", linewidth=1.2)
@@ -118,24 +136,26 @@ ax.set_xlabel("Date")
 ax.set_ylabel("OT")
 ax.legend()
 fig.tight_layout()
-fig.savefig(FIGURES_DIR + "baseline_predictions.png")
+fig.savefig(os.path.join(FIGURES_DIR, "baseline_predictions.png"))
 plt.close()
-print(f"\nSaved: {FIGURES_DIR}baseline_predictions.png")
+print(f"\nSaved: {os.path.join(FIGURES_DIR, 'baseline_predictions.png')}")
 
 # --- 可視化2: ホライズン別MAE/RMSEの棒グラフ ---
 fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
 models = ["Persistence", "SeasonalNaive24", "Mean"]
 colors = ["tab:blue", "tab:orange", "tab:red"]
 x = np.arange(len(HORIZONS))
 width = 0.25
 
-for metric_idx, (metric, ax) in enumerate(zip(["MAE", "RMSE"], axes)):
+for metric, ax in zip(["MAE", "RMSE"], axes):
     for i, (model, color) in enumerate(zip(models, colors)):
-        vals = [
-            results_df[(results_df["Model"] == model) & (results_df["Horizon"] == f"{h}h")][metric].values[0]
-            for h in HORIZONS
-        ]
+        vals = []
+        for h in HORIZONS:
+            v = results_df[(results_df["Model"] == model) & (results_df["Horizon"] == f"{h}h")][metric].values
+            vals.append(v[0] if len(v) else np.nan)
         ax.bar(x + i * width, vals, width, label=model, color=color, alpha=0.8)
+
     ax.set_title(metric)
     ax.set_xlabel("Horizon")
     ax.set_ylabel(metric)
@@ -145,6 +165,6 @@ for metric_idx, (metric, ax) in enumerate(zip(["MAE", "RMSE"], axes)):
 
 fig.suptitle("Baseline Model Comparison by Horizon", fontsize=16, y=1.01)
 fig.tight_layout()
-fig.savefig(FIGURES_DIR + "baseline_metrics.png")
+fig.savefig(os.path.join(FIGURES_DIR, "baseline_metrics.png"))
 plt.close()
-print(f"Saved: {FIGURES_DIR}baseline_metrics.png")
+print(f"Saved: {os.path.join(FIGURES_DIR, 'baseline_metrics.png')}")
