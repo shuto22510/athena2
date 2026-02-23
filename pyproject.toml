@@ -1,0 +1,33 @@
+[project]
+name = "ett-poc"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "shuto22510",email = "shuto.t731@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "pandas (>=3.0.0,<4.0.0)",
+    "numpy (>=2.4.2,<3.0.0)",
+    "matplotlib (>=3.10.8,<4.0.0)",
+    "seaborn (>=0.13.2,<0.14.0)",
+    "statsmodels (>=0.14.6,<0.15.0)",
+    "scikit-learn (>=1.8.0,<2.0.0)",
+    "lightgbm (>=4.6.0,<5.0.0)",
+    "xgboost (>=3.2.0,<4.0.0)",
+    "torch (>=2.1.0,<3.0.0)",
+    "nbconvert (>=7.16.0,<8.0.0)",
+    "nbformat (>=5.10.0,<6.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "jupyter (>=1.1.1,<2.0.0)",
+    "ipykernel (>=7.2.0,<8.0.0)"
+]
