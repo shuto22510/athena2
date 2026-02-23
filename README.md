@@ -32,3 +32,5 @@ pip install -r requirements.txt
 ## 修正履歴
 - SeasonalNaiveのリーク修正（h>24で未来値を参照するバグを発見・修正）
 - Ridge α最適化（α=1→2000で168h MAE 16%改善）
+
+※ スライド・Notebookの数値はlag0なし版（初期検証）を記載しています。時間が足りませんでした申し訳ございません。
